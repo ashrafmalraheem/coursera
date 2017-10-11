@@ -9,13 +9,13 @@
  *
  *****************************************************************************/
 /**
- * @file <Add File Name> 
- * @brief <Add Brief Description Here >
+ *   stats.c
+ * @brief Code file to print the statistics of Array of Char
  *
- * <Add Extended Description Here>
+ *T his program will take an array of char and make statistics on it: it calculate the mean, median, maximum and minimum of that array. It also sort that array in descending order and could print the array in 4*10 matrix.
  *
- * @author <Add FirsName LastName>
- * @date <Add date >
+ * @author Ashraf Abubaker
+ * @date 12 Oct 2017
  *
  */
 
@@ -41,3 +41,12 @@ void main() {
 }
 
 /* Add other Implementation File Code Here */
+char find_mean(unsigned char* array,unsigned int length){}
+void swap(unsigned char* variable1,unsigned variable2){}
+long int find_minimum(unsigned char* array, unsigned int length){}
+long int find_maximum(unsigned char* array, unsigned int length){}
+void sort_array(unsigned char* array, int length){}
+void print_array(unsigned char* array, unsigned int length){}
+char find_median(unsigned char* array,unsigned int length){}
+void print_statistics(unsigned char* array,unsigned int length){}
+
