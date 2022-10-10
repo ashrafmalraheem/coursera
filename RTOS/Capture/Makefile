@@ -12,13 +12,13 @@ CFILES= seqgenex0.c capture.c
 SRCS= ${HFILES} ${CFILES}
 OBJS= ${CFILES:.c=.o}
 
-all:	seqgenex0 
+all:	seqgenex0.out 
 
 clean:
 	-rm -f *.o *.d *.ppm *.pgm
-	-rm -f seqgenex0 seqgen seqgen2 clock_times
+	-rm -f *.out
 
-seqgenex0: ${OBJS}
+seqgenex0.out: ${OBJS}
 	$(CC) $(LDFLAGS) $(CFLAGS) -o $@  *.o -lpthread -lrt  ${HFILES}
 
 depend:
