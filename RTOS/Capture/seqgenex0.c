@@ -7,8 +7,8 @@
 //
 // Sequencer - 100 Hz [gives semaphores to all other services]
 // Service_1 - 50 Hz, every other Sequencer loop
-// Service_2 - 20 Hz, every 5th Sequencer loop 
-// Service_3 - 10 Hz, every 10th Sequencer loop
+// Service_2 - 10 Hz, every 10th Sequencer loop 
+// Service_3 - 6.67 Hz, every 15th Sequencer loop
 //
 // With the above, priorities by RM policy would be:
 //
@@ -53,13 +53,15 @@
 #include "seqgen.h"
 #include <sys/sysinfo.h>
 
+#include "capture.h"
+
 #define ABS_DELAY
 #define DRIFT_CONTROL
-#define NUM_THREADS (4+1)
-
-#undef RTSEQ_PERIODS
-#define RTSEQ_PERIODS 15
-
+#define NUM_THREADS (3+1)
+#undef  RTSEQ_PERIODS 
+#define RTSEQ_PERIODS (11)  // define it here so no need to change the .h file
+#define _SERVICE_4
+#define ASIGN "[COURSE:2][ASSIGNMENT:7]: "
 int fib(const char *s,int n,int id);
 
 int abortTest=FALSE;
@@ -67,9 +69,13 @@ int abortS1=FALSE, abortS2=FALSE, abortS3=FALSE,abortS4=FALSE;
 sem_t semS1, semS2, semS3,semS4;
 static double start_time = 0;
 const int wcetS1 = 1;
-const int wcetS2 = 1;
-const int wcetS3 = 2;
+const int wcetS2 = 2;
+const int wcetS3 = 3;
 const int wcetS4 = 2;
+const int tS1 = 3;
+const int tS2 = 6;
+const int tS3 = 9;
+const int tS4 = 13;
 pthread_t threads[NUM_THREADS];
 pthread_attr_t rt_sched_attr[NUM_THREADS];
 pthread_attr_t main_attr;
@@ -77,6 +83,7 @@ int rt_max_prio, rt_min_prio;
 struct sched_param rt_param[NUM_THREADS];
 threadParams_t threadParams[NUM_THREADS];
 
+unsigned long long seqCnt=0;
 
 
 void main(void)
@@ -109,10 +116,10 @@ void main(void)
         { printf ("Failed to initialize S2 semaphore\n"); exit (-1); }
     if (sem_init (&semS3, 0, 0)) 
         { printf ("Failed to initialize S3 semaphore\n"); exit (-1); }
+
     if (sem_init (&semS4, 0, 0)) 
         { printf ("Failed to initialize S4 semaphore\n"); exit (-1); }
-    
-	mainpid=getpid();
+    mainpid=getpid();
 
     rt_max_prio = sched_get_priority_max(SCHED_FIFO);
     rt_min_prio = sched_get_priority_min(SCHED_FIFO);
@@ -139,7 +146,8 @@ void main(void)
       rc=pthread_attr_setschedpolicy(&rt_sched_attr[i], SCHED_FIFO);
       rc=pthread_attr_setaffinity_np(&rt_sched_attr[i], sizeof(cpu_set_t), &threadcpu);
 
-      rt_param[i].sched_priority=rt_max_prio-i;
+      rt_param[i].sched_priority=rt_max_prio-i*2;
+      printf("\n Service:%d, priority:%d",i,rt_param[i].sched_priority);
       pthread_attr_setschedparam(&rt_sched_attr[i], &rt_param[i]);
 
       threadParams[i].threadIdx=i;
@@ -156,8 +164,8 @@ void main(void)
 
     // Servcie_1 = RT_MAX-1	@ 50 Hz
     //
-    //rt_param[1].sched_priority=rt_max_prio-1;
-    //pthread_attr_setschedparam(&rt_sched_attr[1], &rt_param[1]);
+    rt_param[1].sched_priority=rt_max_prio-1;
+    pthread_attr_setschedparam(&rt_sched_attr[1], &rt_param[1]);
     rc=pthread_create(&threads[1],               // pointer to thread descriptor
                       &rt_sched_attr[1],         // use specific attributes
                       //(void *)0,               // default attributes
@@ -172,8 +180,8 @@ void main(void)
 
     // Service_2 = RT_MAX-2	@ 10 Hz
     //
-    //rt_param[2].sched_priority=rt_max_prio-2;
-    //pthread_attr_setschedparam(&rt_sched_attr[2], &rt_param[2]);
+    rt_param[2].sched_priority=rt_max_prio-2;
+    pthread_attr_setschedparam(&rt_sched_attr[2], &rt_param[2]);
     rc=pthread_create(&threads[2], &rt_sched_attr[2], Service_2, (void *)&(threadParams[2]));
     if(rc < 0)
         perror("pthread_create for service 2");
@@ -181,10 +189,10 @@ void main(void)
         printf("pthread_create successful for service 2\n");
 
 
-    // Service_3 = RT_MAX-3	@ 10 Hz
+    // Service_3 = RT_MAX-3	@ 6.67 Hz
     //
-    //rt_param[3].sched_priority=rt_max_prio-3;
-    //pthread_attr_setschedparam(&rt_sched_attr[3], &rt_param[3]);
+    rt_param[3].sched_priority=rt_max_prio-3;
+    pthread_attr_setschedparam(&rt_sched_attr[3], &rt_param[3]);
     rc=pthread_create(&threads[3], &rt_sched_attr[3], Service_3, (void *)&(threadParams[3]));
     if(rc < 0)
         perror("pthread_create for service 3");
@@ -192,25 +200,26 @@ void main(void)
         printf("pthread_create successful for service 3\n");
 
 
-
-    // Service_4 = RT_MAX-4	@ 5 Hz
+#ifdef SERVICE_4
+    // Service_4 = RT_MAX-4	@ 6.67 Hz
     //
-    //rt_param[4].sched_priority=rt_max_prio-4;
-    //pthread_attr_setschedparam(&rt_sched_attr[4], &rt_param[4]);
+    rt_param[4].sched_priority=rt_max_prio-4;
+    printf("\n S4 prio %d\n",rt_param[4].sched_priority);
+    pthread_attr_setschedparam(&rt_sched_attr[4], &rt_param[4]);
     rc=pthread_create(&threads[4], &rt_sched_attr[4], Service_4, (void *)&(threadParams[4]));
     if(rc < 0)
         perror("pthread_create for service 4");
     else
         printf("pthread_create successful for service 4\n");
-
+#endif
     // Create Sequencer thread, which like a cyclic executive, is highest prio
     printf("Start sequencer\n");
     threadParams[0].sequencePeriods=RTSEQ_PERIODS;
 
     // Sequencer = RT_MAX	@ 1000 Hz
     //
-    //rt_param[0].sched_priority=rt_max_prio;
-    //pthread_attr_setschedparam(&rt_sched_attr[0], &rt_param[0]);
+    rt_param[0].sched_priority=rt_max_prio;
+    pthread_attr_setschedparam(&rt_sched_attr[0], &rt_param[0]);
     rc=pthread_create(&threads[0], &rt_sched_attr[0], Sequencer, (void *)&(threadParams[0]));
     if(rc < 0)
         perror("pthread_create for sequencer service 0");
@@ -236,7 +245,6 @@ void *Sequencer(void *threadp)
     double delta_t=(RTSEQ_DELAY_NSEC/(double)NANOSEC_PER_SEC);
     double scale_dt;
     int rc, delay_cnt=0;
-    unsigned long long seqCnt=0;
     threadParams_t *threadParams = (threadParams_t *)threadp;
 
     current_time=getTimeMsec(); last_time=current_time-delta_t;
@@ -300,17 +308,16 @@ void *Sequencer(void *threadp)
         // Release each service at a sub-rate of the generic sequencer rate
 
         // Servcie_1 = RT_MAX-1	@ 50 Hz
-        if((seqCnt % 2) == 0) sem_post(&semS1);
+        if((seqCnt % tS1) == 0) sem_post(&semS1);
 
-        // Service_2 = RT_MAX-2	@ 20 Hz
-        if((seqCnt % 5) == 0) sem_post(&semS2);
+        // Service_2 = RT_MAX-2	@ 10 Hz
+        if((seqCnt % tS2) == 0) sem_post(&semS2);
 
-        // Service_3 = RT_MAX-3	@ 10 Hz
-        if((seqCnt % 15) == 0) sem_post(&semS3);
+        // Service_3 = RT_MAX-3	@ 6.67 Hz
+        if((seqCnt % tS3) == 0) sem_post(&semS3);
 
-        // Service_4 = RT_MAX-3	@ 5 Hz
-        //if((seqCnt % 20) == 0) sem_post(&semS4);
-		
+        // Service_4 = RT_MAX-3	@ 6.67 Hz
+        if((seqCnt % tS4) == 0) sem_post(&semS4);
         ++seqCnt;
         last_time=current_time;
 
@@ -333,12 +340,12 @@ void *Service_1(void *threadp)
     while(!abortS1)
     {
         sem_wait(&semS1);
-		if(abortS1) break;
+	if(abortS1) break;
     	//current_time=getTimeMsec();
     	//syslog(LOG_CRIT, "S1: start on cpu=%d @ sec=%lf\n", sched_getcpu(), current_time);
 
         S1Cnt++;
-		fib("1",wcetS1,S1Cnt);
+	fib("1",wcetS1,S1Cnt);
         //current_time=getTimeMsec();
         //syslog(LOG_CRIT, "S1: release %llu @ sec=%lf\n", S1Cnt, current_time);
     }
@@ -357,12 +364,12 @@ void *Service_2(void *threadp)
     while(!abortS2)
     {
         sem_wait(&semS2);
-		if(abortS2) break;
+	if(abortS2) break;
     	//current_time=getTimeMsec();
     	//syslog(LOG_CRIT, "S2: start on cpu=%d @ sec=%lf\n", sched_getcpu(), current_time);
         S2Cnt++;
 	
-		fib("2",wcetS2,S2Cnt);
+	fib("2",wcetS2,S2Cnt);
 
        // current_time=getTimeMsec();
        // syslog(LOG_CRIT, "S2: release %llu @ sec=%lf\n", S2Cnt, current_time);
@@ -384,17 +391,17 @@ void *Service_3(void *threadp)
     while(!abortS3)
     {
         
-		sem_wait(&semS3);
-		if(abortS3) break;
-		//current_time=getTimeMsec();
+ 	sem_wait(&semS3);
+	if(abortS3) break;
+	//current_time=getTimeMsec();
     	//syslog(LOG_CRIT, "S3: start on cpu=%d @ sec=%lf\n", sched_getcpu(), current_time);
 
         S3Cnt++;
-	
-		fib("3",wcetS3,S3Cnt);
-		//fib("S3",wcetS1);
+	mainfunction(0, "/dev/video0");
+	fib("3",wcetS3,S3Cnt);
+	//fib("S3",wcetS1);
         //current_time=getTimeMsec();
-        // syslog(LOG_CRIT, "S3: release %llu @ sec=%lf\n", S3Cnt, current_time);
+       // syslog(LOG_CRIT, "S3: release %llu @ sec=%lf\n", S3Cnt, current_time);
     }
 
     pthread_exit((void *)0);
@@ -413,17 +420,17 @@ void *Service_4(void *threadp)
     while(!abortS4)
     {
         
-		sem_wait(&semS4);
-		if(abortS4) break;
-		//current_time=getTimeMsec();
+ 	sem_wait(&semS4);
+	if(abortS4) break;
+	//current_time=getTimeMsec();
     	//syslog(LOG_CRIT, "S3: start on cpu=%d @ sec=%lf\n", sched_getcpu(), current_time);
 
         S4Cnt++;
 	
-		fib("4",wcetS4,S4Cnt);
-		//fib("S3",wcetS1);
+	fib("4",wcetS4,S4Cnt);
+	//fib("S3",wcetS1);
         //current_time=getTimeMsec();
-        // syslog(LOG_CRIT, "S3: release %llu @ sec=%lf\n", S3Cnt, current_time);
+       // syslog(LOG_CRIT, "S3: release %llu @ sec=%lf\n", S3Cnt, current_time);
     }
 
     pthread_exit((void *)0);
@@ -510,25 +517,26 @@ int fib(const char* s,int n,int id)
 	int i;
 	double timeDef = 0;
 	double startTime = 0;
-	const double oneWCET = 0.0099;  // 9.9mS
+	const double oneWCET = 0.012;  // 9.9mS
 	/* 0th and 1st number of the serieas are 0 & 1*/
 	
 
-	for (i = 0; i < n; i++)
+    	syslog(LOG_CRIT, "%sThread %s start %d @ <%lf> on core<%d>\n",ASIGN,s,id,getTimeMsec(), sched_getcpu());
+	for (i = 0; i < 1; i++)
 	{
-    	syslog(LOG_CRIT, "[COURSE:2][ASSIGNMENT:3]: Thread %s start %d @ <%lf> on core<%d>\n",s,id,getTimeMsec(), sched_getcpu());
 		startTime = getTimeMsec();
-	  	//syslog(LOG_CRIT,"%s",s);
-		while(timeDef < oneWCET)
+    		printf("\n Thread %s start %d @ <%lf> on core<%d>   %d",s,id,getTimeMsec(), sched_getcpu(),seqCnt);
+	//	syslog(LOG_CRIT,"%s",s);
+		while(timeDef < (n * oneWCET))
 		{
-			f = f*i/12 + f-i-2*12; // just a random operation
+			f = f/12 + f-2*12; // just a random operation
 			timeDef = getTimeMsec() - startTime;
 		}
 		
-		//printf("\n%s  %d",s,i);
+	//	printf("\n%s  %d",s,i);
 	}
 	
-	//printf("\n%s cost =  %lf= mS",s,1000*(getTimeMsec()-current_time));
+//	printf("\nThread:%s cost =  %lf= mS, ended:%lf",s,1000*(getTimeMsec()-current_time),getTimeMsec());
 	return f;
 
 }
