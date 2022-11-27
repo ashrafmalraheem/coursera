@@ -888,7 +888,7 @@ int main(int argc, char **argv)
     if(argc > 1)
         dev_name = argv[1];
     else
-        dev_name = "/dev/video0";
+        dev_name = "/dev/video4";
 
     for (;;)
     {
